@@ -129,6 +129,16 @@ return {
         end
     end,
 
+    ["caps the ring and ignores non-string time input"] = function()
+        local ticks = clock.dialTicks(4000, 4000)
+        truthy(#ticks <= 400, "tick cap " .. #ticks)
+        same(clock.timeAdvanceEm(nil), 0, "nil advance")
+        same(clock.timeAdvanceEm(42), 0, "number advance")
+        local left, width = clock.timeInk(42)
+        same(left, 0, "number left")
+        same(width, 0, "number width")
+    end,
+
     ["rejects non-finite clock input"] = function()
         local nan = 0 / 0
         same(clock.timeText(nan, nan, true), "00:00", "NaN hour/minute")

@@ -120,7 +120,9 @@ local function palette()
 end
 
 local function measure(text, size, bold)
-    return draw.measureText(text, size, 0, bold or false)
+    local box = draw.measureText(text, size, 0, bold or false)
+    if type(box) ~= "table" then return { width = 0, height = 0 } end
+    return box
 end
 
 -- Host faces carry generous side bearings, so the line box is not the glyph
@@ -166,8 +168,13 @@ local function timeFit(timeText, width, rowHeight, font)
             rowHeight * 0.98 / clock.timeMetrics.inkHeight)
     end
     local probe = measure(timeText, 100, true)
-    local byWidth = width * 0.80 / math.max(1, probe.width)
-    local byHeight = rowHeight * 0.98 / math.max(1, probe.height)
+    local probeWidth = tonumber(probe.width) or 0
+    local probeHeight = tonumber(probe.height) or 0
+    if probeWidth <= 0 or probeHeight <= 0 then
+        return rowHeight * 0.98 / clock.timeMetrics.inkHeight
+    end
+    local byWidth = width * 0.80 / probeWidth
+    local byHeight = rowHeight * 0.98 / probeHeight
     return math.min(byWidth, byHeight) * 100
 end
 

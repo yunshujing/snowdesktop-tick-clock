@@ -145,7 +145,10 @@ function clock.dialTicks(width, height, options)
     if perimeter <= 1 then return {}, 0 end
 
     local spacing = math.max(6, short * (options.spacingRatio or 0.046))
-    local count = math.max(8, math.floor(perimeter / spacing + 0.5))
+    -- Cap the ring at 400 ticks: a pathological surface should not spend the
+    -- frame budget on decorative lines.
+    local count = math.min(400,
+        math.max(8, math.floor(perimeter / spacing + 0.5)))
     local step = perimeter / count
     local tickLength = short * (options.tickLengthRatio or 0.030)
     local thickness = math.max(1, short * 0.0062)
@@ -169,10 +172,10 @@ function clock.dialTicks(width, height, options)
 end
 
 -- Bebas Neue metrics, in em units (unitsPerEm 1000), read from the bundled
--- TTF: { advance, ink xMin, ink xMax }. The bundled font is fixed, so the time
--- is fitted and centred from these instead of measureText -- measuring with a
--- font handle crashes the 1.0.16 host (0xC0000409). Digits sit 0.010 em below
--- the baseline (yMin) and 0.710 em above it (yMax).
+-- TTF: { advance, ink xMin, ink xMax }. main.lua normally measures the real
+-- glyph box at render time; this table is the fallback for hosts that omit
+-- `ink` from measureText, and it also feeds the width fit. Digits sit 0.010 em
+-- below the baseline (yMin) and 0.710 em above it (yMax).
 local GLYPH_EM = {
     ["0"] = { 0.4000, 0.0330, 0.3670 },
     ["1"] = { 0.4000, 0.0800, 0.3050 },
@@ -197,6 +200,7 @@ local function glyph(ch)
 end
 
 function clock.timeAdvanceEm(text)
+    if type(text) ~= "string" then return 0 end
     local total = 0
     for index = 1, #text do
         total = total + glyph(text:sub(index, index))[1]
@@ -208,6 +212,7 @@ end
 -- bearings differ per digit ("1" carries 0.080 em, "4" 0.015 em), so the ink
 -- box -- not the advance width -- is what gets centred.
 function clock.timeInk(text)
+    if type(text) ~= "string" or text == "" then return 0, 0 end
     local pen, left, right = 0, nil, nil
     for index = 1, #text do
         local metrics = glyph(text:sub(index, index))
