@@ -147,5 +147,11 @@ return {
         same(clock.weekdayText(nan, true), "", "NaN weekday")
         same(clock.dateText(nan, nan), "1" .. THIN .. "." .. THIN .. "1",
             "NaN date")
+        same(clock.dateText(0, 0), "1" .. THIN .. "." .. THIN .. "1",
+            "zero clamps")
+        same(clock.dateText(99, 99), "12" .. THIN .. "." .. THIN .. "31",
+            "overflow clamps")
+        same(clock.dateText(1e308, -1e308), "12" .. THIN .. "." .. THIN .. "1",
+            "huge values clamp")
     end,
 }

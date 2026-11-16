@@ -42,6 +42,10 @@ end
 function clock.dateText(month, day, tight)
     month = math.floor(finite(month, 1))
     day = math.floor(finite(day, 1))
+    -- Keep %d on an integer-representable number and inside a real date even
+    -- if a corrupted time snapshot arrives.
+    month = math.max(1, math.min(12, month))
+    day = math.max(1, math.min(31, day))
     if tight then return string.format("%d.%d", month, day) end
     return string.format("%d%s.%s%d", month, THIN, THIN, day)
 end
