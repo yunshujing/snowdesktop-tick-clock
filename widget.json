@@ -10,7 +10,7 @@
   "license": "MIT",
   "name": "Tick Clock",
   "nameKey": "lua_widget.tick_clock.name",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A square clock card ringed with ticks: weekday, oversized time and the date.",
   "descriptionKey": "lua_widget.tick_clock.description",
   "preview": "preview.png",

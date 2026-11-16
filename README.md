@@ -34,6 +34,8 @@
 
 然后在 **设置 → 组件 → 添加组件** 里找到「刻度时钟」。开发目录的改动会即时生效。
 
+开发版清单版本高于已安装版时，可在 **设置 → 组件 → 技术详情 → 安装到“已安装”** 把当前开发快照写入已安装来源，再按需启用或停用开发版。
+
 ## 设置项
 
 | 设置 | 默认 | 说明 |
@@ -63,7 +65,7 @@
 
 ```powershell
 snowwidget lint    .
-snowwidget test    .      # 11 个用例：时间/星期/日期格式、刻度几何、圆角同心、非法输入
+snowwidget test    .      # 12 个用例：时间/星期/日期格式、刻度几何、圆角同心、日期钳制与非法输入
 snowwidget preview . out.png --columns 2 --rows 2 --locale zh-CN
 snowwidget quality .
 snowwidget pack    . tick-clock.snowwidget
