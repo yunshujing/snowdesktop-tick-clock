@@ -35,6 +35,7 @@ local ROWS = { 0.125, 0.13, 0.06, 0.38, 0.07, 0.11, 0.125 }
 local DIGITAL_ONLY = { key = "analog", operator = "falsy" }
 local POINTER_ONLY = { key = "analog", operator = "truthy" }
 local FADE_ON = { key = "fadeTicks", operator = "truthy" }
+local FADE_OFF = { key = "fadeTicks", operator = "falsy" }
 
 -- The host caches the manifest locale table per process. A key added to
 -- widget.json after the instance loaded resolves to the key itself until the
@@ -141,9 +142,9 @@ local settings = {
             key = "fadeSpan",
             label = text("lua_widget.tick_clock.settings_fade_span", "渐隐范围"),
             description = text("lua_widget.tick_clock.settings_fade_span_desc",
-                "刻度保持显示的范围（25–100%），默认 75%；100% 不渐隐，范围外渐隐到最低透明度。"),
+                "刻度保持显示的范围（25–100%），默认 60%；100% 不渐隐，范围外渐隐到最低透明度。"),
             type = "int",
-            default = 75,
+            default = 60,
             min = 25,
             max = 100,
             showWhen = DIGITAL_ONLY,
@@ -158,6 +159,7 @@ local settings = {
             type = "bool",
             default = true,
             showWhen = DIGITAL_ONLY,
+            enabledWhen = FADE_OFF,
         },
         {
             key = "highlightMinute",
@@ -168,6 +170,7 @@ local settings = {
             type = "bool",
             default = true,
             showWhen = DIGITAL_ONLY,
+            enabledWhen = FADE_OFF,
         },
         {
             key = "highlightSecond",
@@ -177,6 +180,7 @@ local settings = {
             type = "bool",
             default = true,
             showWhen = DIGITAL_ONLY,
+            enabledWhen = FADE_OFF,
         },
         {
             key = "tickDensity",
@@ -361,14 +365,14 @@ local function fadeFactor(index, count, anchors, minimum, range)
 end
 
 local function config()
-    return {
+    local cfg = {
         weekday = isOn("weekday"),
         date = isOn("date"),
         hour24 = isOn("hour24"),
         analog = isOn("analog", false),
         fadeTicks = isOn("fadeTicks", false),
         fadeOpacity = numberSetting("fadeOpacity", 0, 0, 100),
-        fadeRange = numberSetting("fadeSpan", 75, 25, 100),
+        fadeRange = numberSetting("fadeSpan", 60, 25, 100),
         highlightHour = isOn("highlightHour", true),
         highlightMinute = isOn("highlightMinute", true),
         highlightSecond = isOn("highlightSecond", true),
@@ -386,6 +390,13 @@ local function config()
         minuteHandThickness = numberSetting("minuteHandThickness", 100, 30, 300),
         secondHandThickness = numberSetting("secondHandThickness", 100, 30, 300),
     }
+    -- Fade and tick highlight are mutually exclusive; fade wins if both are on.
+    if cfg.fadeTicks then
+        cfg.highlightHour = false
+        cfg.highlightMinute = false
+        cfg.highlightSecond = false
+    end
+    return cfg
 end
 
 local function isZh()
@@ -553,12 +564,24 @@ local function buildFrame(model)
     local hourTick = clock.tickIndex(tickCount, hourFraction)
     local minuteTick = clock.tickIndex(tickCount, minuteFraction)
     local secondTick = clock.tickIndex(tickCount, secondFraction)
-    -- Fade follows the red markers that are actually shown; turning a marker
-    -- off removes its anchor so the remaining gradient can reach the empty side.
-    local fadeAnchors = {}
-    if cfg.highlightHour then fadeAnchors[#fadeAnchors + 1] = hourTick end
-    if cfg.highlightMinute then fadeAnchors[#fadeAnchors + 1] = minuteTick end
-    if cfg.highlightSecond then fadeAnchors[#fadeAnchors + 1] = secondTick end
+    -- Fade and highlight are separate modes: fade keeps the time positions as
+    -- anchors but turns the red markers off; highlight mode only colours them.
+    local fadeAnchors
+    if cfg.fadeTicks then
+        fadeAnchors = { hourTick, minuteTick }
+        cfg.highlightHour = false
+        cfg.highlightMinute = false
+        cfg.highlightSecond = false
+    else
+        fadeAnchors = {}
+        if cfg.highlightHour then fadeAnchors[#fadeAnchors + 1] = hourTick end
+        if cfg.highlightMinute then
+            fadeAnchors[#fadeAnchors + 1] = minuteTick
+        end
+        if cfg.highlightSecond then
+            fadeAnchors[#fadeAnchors + 1] = secondTick
+        end
+    end
     local timeText = clock.timeText(parts.hour, parts.min, cfg.hour24)
     local timeInk = timeInkBox(timeText, font)
 
@@ -762,6 +785,36 @@ local function event(_context, model, value)
         return
     end
     if value.kind == "settings.changed" then
+        -- Fade and tick highlight are mutually exclusive. Turning fade on
+        -- closes the three highlight switches; turning any highlight on
+        -- closes fade. storage.set does not emit another settings.changed.
+        local fadeChanged, highlightChanged = false, false
+        if type(value.keys) == "table" then
+            for index = 1, #value.keys do
+                local key = value.keys[index]
+                if key == "fadeTicks" then
+                    fadeChanged = true
+                elseif key == "highlightHour" or key == "highlightMinute"
+                    or key == "highlightSecond" then
+                    highlightChanged = true
+                end
+            end
+        end
+        if fadeChanged and isOn("fadeTicks", false) then
+            if isOn("highlightHour", true) then
+                storage.set("highlightHour", "false")
+            end
+            if isOn("highlightMinute", true) then
+                storage.set("highlightMinute", "false")
+            end
+            if isOn("highlightSecond", true) then
+                storage.set("highlightSecond", "false")
+            end
+        elseif highlightChanged
+            and (isOn("highlightHour", true) or isOn("highlightMinute", true)
+                or isOn("highlightSecond", true)) then
+            storage.set("fadeTicks", "false")
+        end
         widget.invalidate()
     end
 end
