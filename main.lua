@@ -20,6 +20,8 @@ end
 
 -- The reference card's fixed accent (also the model's AccentColor).
 local ACCENT = 0xEE3B33
+local SECOND_COLOR = 0xF0A030
+local HUB_CENTER = 0x1C1C1E
 local HOUR_MARK_ALPHA = 0.72
 local MINUTE_MARK_ALPHA = 0.92
 local SECOND_MARK_ALPHA = 1.0
@@ -689,11 +691,11 @@ local function drawAnalog(f)
         return math.min(requested, math.min(limitX, limitY) * 0.96)
     end
 
-    local function hand(degrees, front, back, width, alpha)
+    local function hand(degrees, front, back, width, alpha, color)
         local x1, y1 = point(degrees + 180, back)
         local x2, y2 = point(degrees, front)
-        draw.line(x1, y1, x2, y2, width, ink, alpha)
-        draw.circle(x2, y2, width / 2, ink, alpha)
+        draw.line(x1, y1, x2, y2, width, color, alpha)
+        draw.circle(x2, y2, width / 2, color, alpha)
     end
 
     local hourAngle, minuteAngle, secondAngle = clock.handDegrees(
@@ -705,13 +707,19 @@ local function drawAnalog(f)
     local secondWidth = math.max(0.3,
         face * 0.006 * f.cfg.secondHandThickness / 100)
     hand(hourAngle, frontLength(hourAngle, face * f.cfg.hourHandLength / 100),
-        face * 0.04, hourWidth, 0.97)
+        face * 0.04, hourWidth, 0.97, ink)
     hand(minuteAngle,
         frontLength(minuteAngle, face * f.cfg.minuteHandLength / 100),
-        face * 0.05, minuteWidth, 0.97)
+        face * 0.05, minuteWidth, 0.97, ink)
     hand(secondAngle,
         frontLength(secondAngle, face * f.cfg.secondHandLength / 100),
-        face * 0.08, secondWidth, 0.86)
+        face * 0.08, secondWidth, 0.95, SECOND_COLOR)
+
+    -- Orange hub: same reference ring with a dark centre.
+    local hubOuter = math.max(2.2, face * 0.042)
+    local hubInner = math.max(1.1, hubOuter * 0.42)
+    draw.circle(cx, cy, hubOuter, SECOND_COLOR, 1)
+    draw.circle(cx, cy, hubInner, HUB_CENTER, 1)
 end
 
 local function render(_context, model)

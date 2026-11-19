@@ -10,7 +10,7 @@
   "license": "MIT",
   "name": "Tick Clock",
   "nameKey": "lua_widget.tick_clock.name",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "A square clock card with time-driven, fadeable ticks and a pointer-clock dial, plus weekday, time and date.",
   "descriptionKey": "lua_widget.tick_clock.description",
   "preview": "preview.png",
