@@ -144,9 +144,9 @@ local settings = {
             key = "fadeSpan",
             label = text("lua_widget.tick_clock.settings_fade_span", "渐隐范围"),
             description = text("lua_widget.tick_clock.settings_fade_span_desc",
-                "以当前秒为头部，刻度保持显示的范围（25–100%），默认 60%；随秒针移动，尾部渐隐到最低透明度。"),
+                "以当前秒为头部，尾部长度占整圈的比例（25–100%），默认 70%；100% 不渐隐，尾部渐隐到最低透明度。"),
             type = "int",
-            default = 60,
+            default = 70,
             min = 25,
             max = 100,
             showWhen = DIGITAL_ONLY,
@@ -303,6 +303,45 @@ local settings = {
             max = 70,
             showWhen = POINTER_ONLY,
         },
+        {
+            key = "hourHandThickness",
+            label = text("lua_widget.tick_clock.settings_hour_thickness",
+                "时针粗细"),
+            description = text(
+                "lua_widget.tick_clock.settings_hour_thickness_desc",
+                "时针线宽相对默认值的百分比（30–300）。"),
+            type = "int",
+            default = 100,
+            min = 30,
+            max = 300,
+            showWhen = POINTER_ONLY,
+        },
+        {
+            key = "minuteHandThickness",
+            label = text("lua_widget.tick_clock.settings_minute_thickness",
+                "分针粗细"),
+            description = text(
+                "lua_widget.tick_clock.settings_minute_thickness_desc",
+                "分针线宽相对默认值的百分比（30–300）。"),
+            type = "int",
+            default = 100,
+            min = 30,
+            max = 300,
+            showWhen = POINTER_ONLY,
+        },
+        {
+            key = "secondHandThickness",
+            label = text("lua_widget.tick_clock.settings_second_thickness",
+                "秒针粗细"),
+            description = text(
+                "lua_widget.tick_clock.settings_second_thickness_desc",
+                "秒针线宽相对默认值的百分比（30–300）。"),
+            type = "int",
+            default = 100,
+            min = 30,
+            max = 300,
+            showWhen = POINTER_ONLY,
+        },
     },
 }
 
@@ -364,7 +403,7 @@ local function config()
         analog = isOn("analog", false),
         fadeTicks = isOn("fadeTicks", false),
         fadeOpacity = numberSetting("fadeOpacity", 0, 0, 100),
-        fadeRange = numberSetting("fadeSpan", 60, 25, 100),
+        fadeRange = numberSetting("fadeSpan", 70, 25, 100),
         highlightHour = isOn("highlightHour", true),
         highlightMinute = isOn("highlightMinute", true),
         highlightSecond = isOn("highlightSecond", true),
@@ -633,14 +672,6 @@ local function drawDigitalTicks(f)
         draw.circle(second[1], second[2], math.max(1.4, f.thickness * 1.25),
             ACCENT, 0.96)
     end
-    -- Fade mode's moving head: a plain ink dot at the current second.
-    if f.cfg.fadeTicks then
-        local head = f.ticks[f.secondTick]
-        if head then
-            draw.circle(head[1], head[2], math.max(1.6, f.thickness * 1.3),
-                ink, 1)
-        end
-    end
 end
 
 local function drawAnalog(f)
@@ -681,17 +712,39 @@ local function drawAnalog(f)
 
     -- Clamp a hand to the content box along its own angle, so a 60-70% hand on
     -- a portrait card stops at the edge instead of drawing past the widget.
-    local function frontLength(degrees, requested)
+    local function frontLength(degrees, requested, capRadius)
         local angle = math.rad(degrees - 90)
         local dx, dy = math.cos(angle), math.sin(angle)
         local limitX = dx > 1e-6 and (f.width - cx) / dx
             or (dx < -1e-6 and cx / -dx or math.huge)
         local limitY = dy > 1e-6 and (f.height - cy) / dy
             or (dy < -1e-6 and cy / -dy or math.huge)
-        return math.min(requested, math.min(limitX, limitY) * 0.96)
+        local limit = math.min(limitX, limitY) - (capRadius or 0) * 1.05
+        return math.max(0, math.min(requested, limit))
     end
 
-    local function hand(degrees, front, back, width, alpha, color)
+    -- Tapered bar: widest at the hub, narrowing to a rounded tip and a short
+    -- back tail. Matches the reference hands instead of a constant-width line.
+    local function taperedHand(degrees, front, back, width, alpha, color)
+        local angle = math.rad(degrees - 90)
+        local dx, dy = math.cos(angle), math.sin(angle)
+        local px, py = -dy, dx
+        local bx, by = point(degrees + 180, back)
+        local tx, ty = point(degrees, front)
+        local wBack, wBase, wTip = width * 0.20, width * 0.30, width * 0.58
+        draw.path({
+            { op = "move", x = bx + px * wBack, y = by + py * wBack },
+            { op = "line", x = cx + px * wBase, y = cy + py * wBase },
+            { op = "line", x = tx + px * wTip, y = ty + py * wTip },
+            { op = "line", x = tx - px * wTip, y = ty - py * wTip },
+            { op = "line", x = cx - px * wBase, y = cy - py * wBase },
+            { op = "line", x = bx - px * wBack, y = by - py * wBack },
+            { op = "close" },
+        }, { fillColor = color, alpha = alpha })
+        draw.circle(tx, ty, wTip, color, alpha)
+    end
+
+    local function lineHand(degrees, front, back, width, alpha, color)
         local x1, y1 = point(degrees + 180, back)
         local x2, y2 = point(degrees, front)
         draw.line(x1, y1, x2, y2, width, color, alpha)
@@ -701,22 +754,26 @@ local function drawAnalog(f)
     local hourAngle, minuteAngle, secondAngle = clock.handDegrees(
         f.parts.hour, f.parts.min, f.parts.sec)
     local hourWidth = math.max(0.8,
-        face * 0.024 * f.cfg.hourHandThickness / 100)
+        face * 0.028 * f.cfg.hourHandThickness / 100)
     local minuteWidth = math.max(0.6,
-        face * 0.018 * f.cfg.minuteHandThickness / 100)
+        face * 0.023 * f.cfg.minuteHandThickness / 100)
     local secondWidth = math.max(0.3,
-        face * 0.006 * f.cfg.secondHandThickness / 100)
-    hand(hourAngle, frontLength(hourAngle, face * f.cfg.hourHandLength / 100),
-        face * 0.04, hourWidth, 0.97, ink)
-    hand(minuteAngle,
-        frontLength(minuteAngle, face * f.cfg.minuteHandLength / 100),
-        face * 0.05, minuteWidth, 0.97, ink)
-    hand(secondAngle,
-        frontLength(secondAngle, face * f.cfg.secondHandLength / 100),
-        face * 0.08, secondWidth, 0.95, SECOND_COLOR)
+        face * 0.005 * f.cfg.secondHandThickness / 100)
+    taperedHand(hourAngle,
+        frontLength(hourAngle, face * f.cfg.hourHandLength / 100,
+            hourWidth * 0.58),
+        face * 0.04, hourWidth, 1, ink)
+    taperedHand(minuteAngle,
+        frontLength(minuteAngle, face * f.cfg.minuteHandLength / 100,
+            minuteWidth * 0.58),
+        face * 0.05, minuteWidth, 1, ink)
+    lineHand(secondAngle,
+        frontLength(secondAngle, face * f.cfg.secondHandLength / 100,
+            secondWidth / 2),
+        face * 0.10, secondWidth, 1, SECOND_COLOR)
 
     -- Orange hub: same reference ring with a dark centre.
-    local hubOuter = math.max(2.2, face * 0.042)
+    local hubOuter = math.max(2.2, face * 0.030)
     local hubInner = math.max(1.1, hubOuter * 0.42)
     draw.circle(cx, cy, hubOuter, SECOND_COLOR, 1)
     draw.circle(cx, cy, hubInner, HUB_CENTER, 1)
@@ -756,6 +813,13 @@ local function clockStamp(parts)
 end
 
 local function setup(_context)
+    -- Normalize a legacy state where both modes were left on: fade wins and
+    -- the three marker switches are closed once, at load.
+    if isOn("fadeTicks", false) then
+        if isOn("highlightHour", true) then storage.set("highlightHour", "false") end
+        if isOn("highlightMinute", true) then storage.set("highlightMinute", "false") end
+        if isOn("highlightSecond", true) then storage.set("highlightSecond", "false") end
+    end
     local model = { stamp = clockStamp(time.parts(time.now())) }
     model.displayFont = DISPLAY_FONT
     -- The tick ring highlights hour/minute/second positions and the pointer
@@ -779,6 +843,12 @@ local function event(_context, model, value)
         -- Fade and tick highlight are mutually exclusive. Turning fade on
         -- closes the three highlight switches; turning any highlight on
         -- closes fade. storage.set does not emit another settings.changed.
+        if value.preview == true then
+            -- Uncommitted previews must not rewrite the other mode's storage;
+            -- render() already gives fade priority while the preview is open.
+            widget.invalidate()
+            return
+        end
         local fadeChanged, highlightChanged = false, false
         if type(value.keys) == "table" then
             for index = 1, #value.keys do
@@ -790,6 +860,10 @@ local function event(_context, model, value)
                     highlightChanged = true
                 end
             end
+        else
+            -- No key list: let the current state decide, fade winning ties.
+            fadeChanged = isOn("fadeTicks", false)
+            highlightChanged = not fadeChanged
         end
         if fadeChanged and isOn("fadeTicks", false) then
             if isOn("highlightHour", true) then

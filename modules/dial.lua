@@ -272,7 +272,7 @@ function clock.fadeFactor(index, count, anchors, minimum, range)
             if distance < behind then behind = distance end
         end
     end
-    range = math.max(0.25, math.min(1, finite(range, 0.6)))
+    range = math.max(0.25, math.min(1, finite(range, 0.7)))
     if range >= 1 then return 1 end
     local tail = count * range
     local factor = math.max(0, 1 - behind / tail)

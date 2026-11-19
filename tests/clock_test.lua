@@ -191,8 +191,8 @@ return {
 
     ["fades ticks away from the moving head"] = function()
         same(clock.fadeFactor(31, 60, { 31 }), 1, "head alpha")
-        near(clock.fadeFactor(16, 60, { 31 }), 7 / 12, 1e-9,
-            "default 60% trail fades behind the head")
+        near(clock.fadeFactor(16, 60, { 31 }), 9 / 14, 1e-9,
+            "default 70% trail fades behind the head")
         near(clock.fadeFactor(46, 60, { 31 }), 0, 1e-9,
             "tail end disappears")
         near(clock.fadeFactor(50, 60, { 31 }, 0, 0.75), 4 / 45, 1e-9,
