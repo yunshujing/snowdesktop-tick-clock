@@ -142,7 +142,7 @@ local settings = {
             key = "fadeSpan",
             label = text("lua_widget.tick_clock.settings_fade_span", "渐隐范围"),
             description = text("lua_widget.tick_clock.settings_fade_span_desc",
-                "刻度保持显示的范围（25–100%），默认 60%；100% 不渐隐，范围外渐隐到最低透明度。"),
+                "以当前秒为头部，刻度保持显示的范围（25–100%），默认 60%；随秒针移动，尾部渐隐到最低透明度。"),
             type = "int",
             default = 60,
             min = 25,
@@ -337,29 +337,19 @@ local function fadeFactor(index, count, anchors, minimum, range)
     index = math.floor(tonumber(index) or 1)
     if count < 1 then return 1 end
     if type(anchors) ~= "table" or #anchors == 0 then return 1 end
-    local nearest = count / 2
+    -- Distance behind the moving head, clockwise-positive index order.
+    local behind = count
     for anchorIndex = 1, #anchors do
         local anchor = math.floor(tonumber(anchors[anchorIndex]) or 0)
         if anchor >= 1 and anchor <= count then
-            local distance = math.abs(index - anchor)
-            distance = math.min(distance, count - distance)
-            if distance < nearest then nearest = distance end
+            local distance = (anchor - index) % count
+            if distance < behind then behind = distance end
         end
     end
-    range = math.max(0.25, math.min(1, tonumber(range) or 0.75))
+    range = math.max(0.25, math.min(1, tonumber(range) or 0.6))
     if range >= 1 then return 1 end
-    -- `range` is the visible portion of the ring; outside it the tick drops to
-    -- the minimum opacity. A short edge band avoids a hard cut.
-    local visible = count * range / 2
-    local edge = math.max(1, visible * 0.15)
-    local factor
-    if nearest <= visible - edge then
-        factor = 1
-    elseif nearest >= visible then
-        factor = 0
-    else
-        factor = (visible - nearest) / edge
-    end
+    local tail = count * range
+    local factor = math.max(0, 1 - behind / tail)
     minimum = math.max(0, math.min(1, tonumber(minimum) or 0))
     return minimum + (1 - minimum) * factor
 end
@@ -564,24 +554,9 @@ local function buildFrame(model)
     local hourTick = clock.tickIndex(tickCount, hourFraction)
     local minuteTick = clock.tickIndex(tickCount, minuteFraction)
     local secondTick = clock.tickIndex(tickCount, secondFraction)
-    -- Fade and highlight are separate modes: fade keeps the time positions as
-    -- anchors but turns the red markers off; highlight mode only colours them.
-    local fadeAnchors
-    if cfg.fadeTicks then
-        fadeAnchors = { hourTick, minuteTick }
-        cfg.highlightHour = false
-        cfg.highlightMinute = false
-        cfg.highlightSecond = false
-    else
-        fadeAnchors = {}
-        if cfg.highlightHour then fadeAnchors[#fadeAnchors + 1] = hourTick end
-        if cfg.highlightMinute then
-            fadeAnchors[#fadeAnchors + 1] = minuteTick
-        end
-        if cfg.highlightSecond then
-            fadeAnchors[#fadeAnchors + 1] = secondTick
-        end
-    end
+    -- Fade mode is a moving head at the current second: the visible band
+    -- follows the second tick and the tail left behind fades away.
+    local fadeAnchors = { secondTick }
     local timeText = clock.timeText(parts.hour, parts.min, cfg.hour24)
     local timeInk = timeInkBox(timeText, font)
 
@@ -655,6 +630,14 @@ local function drawDigitalTicks(f)
     if second then
         draw.circle(second[1], second[2], math.max(1.4, f.thickness * 1.25),
             ACCENT, 0.96)
+    end
+    -- Fade mode's moving head: a plain ink dot at the current second.
+    if f.cfg.fadeTicks then
+        local head = f.ticks[f.secondTick]
+        if head then
+            draw.circle(head[1], head[2], math.max(1.6, f.thickness * 1.3),
+                ink, 1)
+        end
     end
 end
 

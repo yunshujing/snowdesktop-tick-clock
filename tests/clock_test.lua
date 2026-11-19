@@ -189,29 +189,25 @@ return {
         same(clock.tickIndex(0, 0.5), nil, "empty ring")
     end,
 
-    ["fades ticks away from highlighted anchors"] = function()
-        near(clock.fadeFactor(1, 60, { 1 }), 1, 1e-9, "anchor alpha")
-        same(clock.fadeFactor(11, 60, { 1 }), 1,
-            "visible range keeps full brightness")
-        near(clock.fadeFactor(31, 60, { 1 }), 0, 1e-9, "far tick disappears")
-        same(clock.fadeFactor(20, 60, { 1 }, 0, 0.25), 0,
-            "quarter range hides the far side")
-        near(clock.fadeFactor(31, 60, { 1 }, 0.15, 0.25), 0.15, 1e-9,
+    ["fades ticks away from the moving head"] = function()
+        same(clock.fadeFactor(31, 60, { 31 }), 1, "head alpha")
+        near(clock.fadeFactor(16, 60, { 31 }), 7 / 12, 1e-9,
+            "default 60% trail fades behind the head")
+        near(clock.fadeFactor(46, 60, { 31 }), 0, 1e-9,
+            "tail end disappears")
+        near(clock.fadeFactor(50, 60, { 31 }, 0, 0.75), 4 / 45, 1e-9,
+            "ticks ahead of the head are outside the trail")
+        near(clock.fadeFactor(46, 60, { 31 }, 0.15, 0.75), 0.15, 1e-9,
             "minimum opacity floor")
-        near(clock.fadeFactor(31, 60, { 1 }, 2, 0.25), 1, 1e-9,
-            "minimum opacity clamps to one")
-        near(clock.fadeFactor(15, 60, { 1 }, 0, 0.5), 4 / 9, 1e-9,
-            "edge band blends the fade range")
-        same(clock.fadeFactor(20, 60, { 1 }, 0, 0.1), 0,
+        near(clock.fadeFactor(26, 60, { 31 }, 0, 0.25), 2 / 3, 1e-9,
+            "quarter trail uses a quarter of the ring")
+        same(clock.fadeFactor(16, 60, { 31 }, 0, 0.1), 0,
             "range clamps to a quarter of the ring")
-        same(clock.fadeFactor(31, 60, { 1 }, 0, 1), 1,
+        same(clock.fadeFactor(31, 60, { 31 }, 0, 1), 1,
             "full range disables fade")
-        truthy(clock.fadeFactor(23, 60, { 1 })
-            > clock.fadeFactor(24, 60, { 1 }), "nearer anchor is brighter")
         same(clock.fadeFactor(5, 60, {}), 1, "no anchors keeps alpha")
         same(clock.fadeFactor(5, 0, { 1 }), 1, "empty ring keeps alpha")
     end,
-
     ["aligns the time-driven ring to twelve o'clock"] = function()
         local ticks = clock.dialTicks(400, 400, {
             cardRadius = 28, alignTop = true,

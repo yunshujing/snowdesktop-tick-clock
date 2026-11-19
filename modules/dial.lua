@@ -255,36 +255,27 @@ function clock.tickIndex(count, fraction)
     return math.floor(wrapped * count) + 1
 end
 
--- Fade factor for a tick relative to one or more highlighted anchors. `range`
--- (a quarter to the whole ring, default three quarters) is the portion kept
--- visible: inside it alpha is untouched, outside it drops to `minimum`. A short
--- edge band blends the boundary. With no anchors it leaves alpha untouched.
+-- Fade factor for a moving head at `anchors[1]`. The visible trail follows the
+-- head and fades to `minimum` over `range` of the ring; ticks ahead of the head
+-- are outside the trail and stay at the minimum. With no anchors alpha is
+-- untouched.
 function clock.fadeFactor(index, count, anchors, minimum, range)
     count = math.floor(finite(count, 0))
     index = math.floor(finite(index, 1))
     if count < 1 then return 1 end
     if type(anchors) ~= "table" or #anchors == 0 then return 1 end
-    local nearest = count / 2
+    local behind = count
     for anchorIndex = 1, #anchors do
         local anchor = math.floor(finite(anchors[anchorIndex], 0))
         if anchor >= 1 and anchor <= count then
-            local distance = math.abs(index - anchor)
-            distance = math.min(distance, count - distance)
-            if distance < nearest then nearest = distance end
+            local distance = (anchor - index) % count
+            if distance < behind then behind = distance end
         end
     end
-    range = math.max(0.25, math.min(1, finite(range, 0.75)))
+    range = math.max(0.25, math.min(1, finite(range, 0.6)))
     if range >= 1 then return 1 end
-    local visible = count * range / 2
-    local edge = math.max(1, visible * 0.15)
-    local factor
-    if nearest <= visible - edge then
-        factor = 1
-    elseif nearest >= visible then
-        factor = 0
-    else
-        factor = (visible - nearest) / edge
-    end
+    local tail = count * range
+    local factor = math.max(0, 1 - behind / tail)
     minimum = math.max(0, math.min(1, finite(minimum, 0)))
     return minimum + (1 - minimum) * factor
 end
