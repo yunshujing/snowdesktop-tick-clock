@@ -1,4 +1,4 @@
--- modules/clock.lua - pure clock text and dial geometry.
+-- modules/dial.lua - pure clock text and dial geometry.
 --
 -- Kept free of host APIs so `snowwidget test` can exercise it: the dial is the
 -- same arc-length parameterisation the reference card uses (equal spacing along
@@ -106,7 +106,8 @@ end
 
 -- dialTicks(width, height, options) -> ticks, thickness
 -- Each tick is { x1, y1, x2, y2 }: the outer end sits on the outline, the inner
--- end points at the card centre.
+-- end points at the card centre. `options.count` pins the ring to 60 positions;
+-- `options.clockTicks` varies tick length/thickness for an analog dial.
 --
 -- The outline is the card border offset inward by `inset`, so its corner radius
 -- is the card's own radius minus that inset (concentric rounded rects). The
@@ -115,7 +116,9 @@ end
 -- for tests and non-standard hosts.
 function clock.dialTicks(width, height, options)
     options = options or {}
-    if type(width) ~= "number" or type(height) ~= "number" then return {}, 0 end
+    if type(width) ~= "number" or type(height) ~= "number"
+        or width ~= width or height ~= height
+        or width <= 0 or height <= 0 then return {}, 0 end
     local short = math.min(width, height)
     -- A one-cell card turns the ring into a grey smear; the reference card has
     -- no such size either.
@@ -149,30 +152,137 @@ function clock.dialTicks(width, height, options)
     if perimeter <= 1 then return {}, 0 end
 
     local spacing = math.max(6, short * (options.spacingRatio or 0.046))
+    local count
+    if options.count ~= nil then
+        count = math.floor(finite(options.count, 0))
+    else
+        count = math.floor(perimeter / spacing + 0.5)
+    end
     -- Cap the ring at 400 ticks: a pathological surface should not spend the
     -- frame budget on decorative lines.
-    local count = math.min(400,
-        math.max(8, math.floor(perimeter / spacing + 0.5)))
+    count = math.min(400, math.max(8, count))
     local step = perimeter / count
-    local tickLength = short * (options.tickLengthRatio or 0.030)
-    local thickness = math.max(1, short * 0.0062)
+    local baseLength = short * (options.tickLengthRatio or 0.030)
+    local thicknessScale = math.max(0.3, math.min(4,
+        finite(options.thicknessScale, 1)))
+    local baseThickness = math.max(1, short * 0.0062) * thicknessScale
+    local minorLengthRatio = options.minorLengthRatio or 0.045
+    local cardinalLengthRatio = options.cardinalLengthRatio or 0.120
+    local cornerLengthRatio = options.cornerLengthRatio or 0.140
     local centerX, centerY = width / 2, height / 2
+    -- Twelve major positions keep the class angles fixed at 30 degrees. The
+    -- caller snaps the count to a multiple of 12 for clock faces.
+    local clockClasses = options.clockTicks and count % 12 == 0 or false
+    local majorEvery = clockClasses and count / 12 or 1
+    local quarterEvery = clockClasses and majorEvery * 3 or 1
+    -- A time-driven ring starts at 12 o'clock (the middle of the top edge);
+    -- purely decorative callers keep the original top-left start.
+    local start = options.alignTop and edgeX / 2 or 0
 
     local ticks = {}
     for index = 0, count - 1 do
-        local x, y = sample(index * step, left, top, right, bottom, radius,
-            edgeX, edgeY, arc)
+        local x, y = sample((start + index * step) % perimeter,
+            left, top, right, bottom, radius, edgeX, edgeY, arc)
         local dx, dy = centerX - x, centerY - y
-        local length = math.sqrt(dx * dx + dy * dy)
-        if length > 0.001 then
+        local distance = math.sqrt(dx * dx + dy * dy)
+        if distance > 0.001 then
+            local major = clockClasses and index % majorEvery == 0 or false
+            local quarter = clockClasses and index % quarterEvery == 0 or false
+            local corner = clockClasses and major
+                and (index % quarterEvery == majorEvery
+                    or index % quarterEvery == majorEvery * 2) or false
+            local length = baseLength
+            local thickness = baseThickness
+            if options.clockTicks then
+                if corner then
+                    length = short * cornerLengthRatio
+                    thickness = math.max(2.5, short * 0.010)
+                        * thicknessScale
+                elseif quarter then
+                    length = short * cardinalLengthRatio
+                    thickness = math.max(2.5, short * 0.012)
+                        * thicknessScale
+                elseif major then
+                    length = short * 0.090
+                    thickness = math.max(1.4, short * 0.007)
+                        * thicknessScale
+                else
+                    length = short * minorLengthRatio
+                    thickness = math.max(0.8, short * 0.0035)
+                        * thicknessScale
+                end
+            end
             ticks[#ticks + 1] = {
                 x, y,
-                x + dx / length * tickLength,
-                y + dy / length * tickLength,
+                x + dx / distance * length,
+                y + dy / distance * length,
+                major = major,
+                quarter = quarter,
+                corner = corner,
+                length = length,
+                thickness = thickness,
             }
         end
     end
-    return ticks, thickness
+    return ticks, baseThickness
+end
+
+-- Time fractions for a 12-hour dial. All three values are in [0, 1); the hour
+-- fraction includes the minute and second so the hour hand creeps continuously.
+function clock.timeFractions(hour, minute, second)
+    hour = finite(hour, 0) % 12
+    minute = finite(minute, 0) % 60
+    second = finite(second, 0) % 60
+    return (hour + minute / 60 + second / 3600) / 12,
+        (minute + second / 60) / 60,
+        second / 60
+end
+
+-- Degrees clockwise from 12 o'clock. The minute hand advances between tick
+-- marks, matching a real analog clock instead of snapping once a minute.
+function clock.handDegrees(hour, minute, second)
+    local hourFraction, minuteFraction, secondFraction =
+        clock.timeFractions(hour, minute, second)
+    return hourFraction * 360, minuteFraction * 360, secondFraction * 360
+end
+
+-- Tick containing a time fraction on a ring with `count` evenly spaced
+-- positions. Returned indices are 1-based; nil means an impossible ring.
+function clock.tickIndex(count, fraction)
+    count = math.floor(finite(count, 0))
+    if count < 1 then return nil end
+    local wrapped = finite(fraction, 0) % 1
+    return math.floor(wrapped * count) + 1
+end
+
+-- Fade factor for a tick relative to one or more highlighted anchors. `range`
+-- (a quarter to the whole half-ring, default three quarters) is the part kept
+-- at full brightness; only the remaining tail fades to 0, so enabling fade does
+-- not dim ticks that stay visible. With no anchors it leaves alpha untouched.
+function clock.fadeFactor(index, count, anchors, minimum, range)
+    count = math.floor(finite(count, 0))
+    index = math.floor(finite(index, 1))
+    if count < 1 then return 1 end
+    if type(anchors) ~= "table" or #anchors == 0 then return 1 end
+    local nearest = count / 2
+    for anchorIndex = 1, #anchors do
+        local anchor = math.floor(finite(anchors[anchorIndex], 0))
+        if anchor >= 1 and anchor <= count then
+            local distance = math.abs(index - anchor)
+            distance = math.min(distance, count - distance)
+            if distance < nearest then nearest = distance end
+        end
+    end
+    range = math.max(0.25, math.min(1, finite(range, 0.75)))
+    local half = count / 2
+    local hold = half * (1 - range)
+    local tail = half * range
+    local factor = 1
+    if nearest > hold and tail > 0 then
+        factor = math.max(0, 1 - (nearest - hold) / tail)
+    end
+    minimum = math.max(0, math.min(1, finite(minimum, 0)))
+    return minimum + (1 - minimum) * factor
 end
 
 -- Bebas Neue metrics, in em units (unitsPerEm 1000), read from the bundled

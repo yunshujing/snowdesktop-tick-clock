@@ -1,4 +1,4 @@
-local clock = module.require("modules/clock.lua")
+local clock = module.require("modules/dial.lua")
 
 local function same(actual, expected, label)
     if actual ~= expected then
@@ -9,6 +9,13 @@ end
 
 local function truthy(value, label)
     if not value then error(label, 2) end
+end
+
+local function near(actual, expected, tolerance, label)
+    if math.abs(actual - expected) > tolerance then
+        error(string.format("%s: expected %s, got %s", label,
+            tostring(expected), tostring(actual)), 2)
+    end
 end
 
 local THIN = "\226\128\134"
@@ -153,5 +160,133 @@ return {
             "overflow clamps")
         same(clock.dateText(1e308, -1e308), "12" .. THIN .. "." .. THIN .. "1",
             "huge values clamp")
+    end,
+
+    ["computes continuous dial fractions and hand angles"] = function()
+        local hourFraction, minuteFraction, secondFraction =
+            clock.timeFractions(3, 30, 15)
+        near(hourFraction, (3 + 30 / 60 + 15 / 3600) / 12, 1e-12,
+            "hour fraction")
+        near(minuteFraction, (30 + 15 / 60) / 60, 1e-12, "minute fraction")
+        near(secondFraction, 0.25, 1e-12, "second fraction")
+        local hourAngle, minuteAngle, secondAngle =
+            clock.handDegrees(3, 30, 15)
+        near(hourAngle, 105.125, 1e-9, "hour hand")
+        near(minuteAngle, 181.5, 1e-9, "minute hand")
+        near(secondAngle, 90, 1e-9, "second hand")
+        local noonHour, noonMinute, noonSecond = clock.handDegrees(12, 0, 0)
+        near(noonHour, 0, 1e-9, "noon hour")
+        near(noonMinute, 0, 1e-9, "noon minute")
+        near(noonSecond, 0, 1e-9, "noon second")
+    end,
+
+    ["maps clock fractions onto the nearest ring tick"] = function()
+        same(clock.tickIndex(60, 0), 1, "top tick")
+        same(clock.tickIndex(60, 0.25), 16, "quarter tick")
+        same(clock.tickIndex(60, 0.999), 60, "last tick")
+        same(clock.tickIndex(60, 1), 1, "wrapped tick")
+        same(clock.tickIndex(60, -0.25), 46, "negative fraction wraps")
+        same(clock.tickIndex(0, 0.5), nil, "empty ring")
+    end,
+
+    ["fades ticks away from highlighted anchors"] = function()
+        near(clock.fadeFactor(1, 60, { 1 }), 1, 1e-9, "anchor alpha")
+        near(clock.fadeFactor(11, 60, { 1 }), 1 - 2.5 / 22.5, 1e-9,
+            "default three-quarter range")
+        near(clock.fadeFactor(31, 60, { 1 }), 0, 1e-9, "far tick disappears")
+        same(clock.fadeFactor(20, 60, { 1 }, 0, 0.25), 1,
+            "quarter range keeps the near side bright")
+        near(clock.fadeFactor(31, 60, { 1 }, 0.15, 0.25), 0.15, 1e-9,
+            "minimum opacity floor")
+        near(clock.fadeFactor(31, 60, { 1 }, 2, 0.25), 1, 1e-9,
+            "minimum opacity clamps to one")
+        near(clock.fadeFactor(20, 60, { 1 }, 0, 0.5), 1 - 4 / 15, 1e-9,
+            "custom fade range")
+        same(clock.fadeFactor(20, 60, { 1 }, 0, 0.1), 1,
+            "range clamps to a quarter of the half-ring")
+        truthy(clock.fadeFactor(25, 60, { 1 })
+            > clock.fadeFactor(28, 60, { 1 }), "nearer anchor is brighter")
+        same(clock.fadeFactor(5, 60, {}), 1, "no anchors keeps alpha")
+        same(clock.fadeFactor(5, 0, { 1 }), 1, "empty ring keeps alpha")
+    end,
+
+    ["aligns the time-driven ring to twelve o'clock"] = function()
+        local ticks = clock.dialTicks(400, 400, {
+            cardRadius = 28, alignTop = true,
+        })
+        truthy(#ticks > 0, "ring exists")
+        near(ticks[1][1], 200, 0.01, "first tick x")
+        near(ticks[1][2], 400 * 0.041, 0.01, "first tick y")
+    end,
+
+    ["builds a bounded 60-tick analog face"] = function()
+        local ticks = clock.dialTicks(400, 400, {
+            cardRadius = 28, alignTop = true,
+            count = 60, clockTicks = true,
+        })
+        same(#ticks, 60, "minute tick count")
+        local major, quarter, corner = 0, 0, 0
+        for index = 1, #ticks do
+            local tick = ticks[index]
+            if tick.major then major = major + 1 end
+            if tick.quarter then quarter = quarter + 1 end
+            if tick.corner then corner = corner + 1 end
+            for field = 1, 4 do
+                truthy(tick[field] == tick[field], "finite tick coordinate")
+            end
+            truthy(tick[1] >= 0 and tick[1] <= 400, "outer x inside")
+            truthy(tick[2] >= 0 and tick[2] <= 400, "outer y inside")
+            truthy(tick[3] >= 0 and tick[3] <= 400, "inner x inside")
+            truthy(tick[4] >= 0 and tick[4] <= 400, "inner y inside")
+            truthy(tick.length > 0 and tick.thickness > 0, "positive size")
+        end
+        same(major, 12, "five-minute ticks")
+        same(quarter, 4, "quarter-hour ticks")
+        same(corner, 8, "two highlighted ticks per rounded corner")
+        truthy(ticks[1].quarter and ticks[1].length > ticks[2].length,
+            "quarter tick is longer than a minute tick")
+        truthy(ticks[6].corner and ticks[6].length > ticks[1].length,
+            "corner highlight is longer than a quarter tick")
+        truthy(ticks[6].corner and ticks[6].length > ticks[2].length,
+            "corner highlight is longer than a minute tick")
+        local longCorner = clock.dialTicks(400, 400, {
+            cardRadius = 28, alignTop = true,
+            count = 60, clockTicks = true, cornerLengthRatio = 0.20,
+        })
+        near(longCorner[6].length, 80, 1e-6, "custom corner length")
+        local longCardinal = clock.dialTicks(400, 400, {
+            cardRadius = 28, alignTop = true,
+            count = 60, clockTicks = true, cardinalLengthRatio = 0.18,
+        })
+        near(longCardinal[1].length, 72, 1e-6, "custom cardinal length")
+        for _, count in ipairs({ 36, 120 }) do
+            local dense = clock.dialTicks(400, 400, {
+                cardRadius = 28, alignTop = true,
+                count = count, clockTicks = true,
+            })
+            same(#dense, count, "density tick count " .. count)
+            local dMajor, dQuarter, dCorner = 0, 0, 0
+            for index = 1, #dense do
+                local tick = dense[index]
+                if tick.major then dMajor = dMajor + 1 end
+                if tick.quarter then dQuarter = dQuarter + 1 end
+                if tick.corner then dCorner = dCorner + 1 end
+            end
+            same(dMajor, 12, "twelve majors at density " .. count)
+            same(dQuarter, 4, "four quarters at density " .. count)
+            same(dCorner, 8, "eight corners at density " .. count)
+            truthy(dense[math.floor(count / 12) + 1].corner,
+                "corner class stays at thirty degrees")
+        end
+        local thicker = clock.dialTicks(400, 400, {
+            cardRadius = 28, alignTop = true,
+            count = 60, clockTicks = true, thicknessScale = 2,
+        })
+        near(thicker[2].thickness, ticks[2].thickness * 2, 1e-6,
+            "thickness setting scales tick width")
+        local small = clock.dialTicks(80, 80, { count = 60, clockTicks = true })
+        same(#small, 0, "small card skips dial")
+        local nanSize = clock.dialTicks(0 / 0, 200, { count = 60 })
+        same(#nanSize, 0, "NaN size skips dial")
     end,
 }
