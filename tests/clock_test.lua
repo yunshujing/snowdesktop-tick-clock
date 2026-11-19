@@ -191,21 +191,23 @@ return {
 
     ["fades ticks away from highlighted anchors"] = function()
         near(clock.fadeFactor(1, 60, { 1 }), 1, 1e-9, "anchor alpha")
-        near(clock.fadeFactor(11, 60, { 1 }), 1 - 2.5 / 22.5, 1e-9,
-            "default three-quarter range")
+        same(clock.fadeFactor(11, 60, { 1 }), 1,
+            "visible range keeps full brightness")
         near(clock.fadeFactor(31, 60, { 1 }), 0, 1e-9, "far tick disappears")
-        same(clock.fadeFactor(20, 60, { 1 }, 0, 0.25), 1,
-            "quarter range keeps the near side bright")
+        same(clock.fadeFactor(20, 60, { 1 }, 0, 0.25), 0,
+            "quarter range hides the far side")
         near(clock.fadeFactor(31, 60, { 1 }, 0.15, 0.25), 0.15, 1e-9,
             "minimum opacity floor")
         near(clock.fadeFactor(31, 60, { 1 }, 2, 0.25), 1, 1e-9,
             "minimum opacity clamps to one")
-        near(clock.fadeFactor(20, 60, { 1 }, 0, 0.5), 1 - 4 / 15, 1e-9,
-            "custom fade range")
-        same(clock.fadeFactor(20, 60, { 1 }, 0, 0.1), 1,
-            "range clamps to a quarter of the half-ring")
-        truthy(clock.fadeFactor(25, 60, { 1 })
-            > clock.fadeFactor(28, 60, { 1 }), "nearer anchor is brighter")
+        near(clock.fadeFactor(15, 60, { 1 }, 0, 0.5), 4 / 9, 1e-9,
+            "edge band blends the fade range")
+        same(clock.fadeFactor(20, 60, { 1 }, 0, 0.1), 0,
+            "range clamps to a quarter of the ring")
+        same(clock.fadeFactor(31, 60, { 1 }, 0, 1), 1,
+            "full range disables fade")
+        truthy(clock.fadeFactor(23, 60, { 1 })
+            > clock.fadeFactor(24, 60, { 1 }), "nearer anchor is brighter")
         same(clock.fadeFactor(5, 60, {}), 1, "no anchors keeps alpha")
         same(clock.fadeFactor(5, 0, { 1 }), 1, "empty ring keeps alpha")
     end,

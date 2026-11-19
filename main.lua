@@ -141,7 +141,7 @@ local settings = {
             key = "fadeSpan",
             label = text("lua_widget.tick_clock.settings_fade_span", "渐隐范围"),
             description = text("lua_widget.tick_clock.settings_fade_span_desc",
-                "向对侧方向渐隐的比例（25–100%），默认 75%；靠近标记的刻度保持原亮度。"),
+                "刻度保持显示的范围（25–100%），默认 75%；100% 不渐隐，范围外渐隐到最低透明度。"),
             type = "int",
             default = 75,
             min = 25,
@@ -343,12 +343,18 @@ local function fadeFactor(index, count, anchors, minimum, range)
         end
     end
     range = math.max(0.25, math.min(1, tonumber(range) or 0.75))
-    local half = count / 2
-    local hold = half * (1 - range)
-    local tail = half * range
-    local factor = 1
-    if nearest > hold and tail > 0 then
-        factor = math.max(0, 1 - (nearest - hold) / tail)
+    if range >= 1 then return 1 end
+    -- `range` is the visible portion of the ring; outside it the tick drops to
+    -- the minimum opacity. A short edge band avoids a hard cut.
+    local visible = count * range / 2
+    local edge = math.max(1, visible * 0.15)
+    local factor
+    if nearest <= visible - edge then
+        factor = 1
+    elseif nearest >= visible then
+        factor = 0
+    else
+        factor = (visible - nearest) / edge
     end
     minimum = math.max(0, math.min(1, tonumber(minimum) or 0))
     return minimum + (1 - minimum) * factor

@@ -256,9 +256,9 @@ function clock.tickIndex(count, fraction)
 end
 
 -- Fade factor for a tick relative to one or more highlighted anchors. `range`
--- (a quarter to the whole half-ring, default three quarters) is the part kept
--- at full brightness; only the remaining tail fades to 0, so enabling fade does
--- not dim ticks that stay visible. With no anchors it leaves alpha untouched.
+-- (a quarter to the whole ring, default three quarters) is the portion kept
+-- visible: inside it alpha is untouched, outside it drops to `minimum`. A short
+-- edge band blends the boundary. With no anchors it leaves alpha untouched.
 function clock.fadeFactor(index, count, anchors, minimum, range)
     count = math.floor(finite(count, 0))
     index = math.floor(finite(index, 1))
@@ -274,12 +274,16 @@ function clock.fadeFactor(index, count, anchors, minimum, range)
         end
     end
     range = math.max(0.25, math.min(1, finite(range, 0.75)))
-    local half = count / 2
-    local hold = half * (1 - range)
-    local tail = half * range
-    local factor = 1
-    if nearest > hold and tail > 0 then
-        factor = math.max(0, 1 - (nearest - hold) / tail)
+    if range >= 1 then return 1 end
+    local visible = count * range / 2
+    local edge = math.max(1, visible * 0.15)
+    local factor
+    if nearest <= visible - edge then
+        factor = 1
+    elseif nearest >= visible then
+        factor = 0
+    else
+        factor = (visible - nearest) / edge
     end
     minimum = math.max(0, math.min(1, finite(minimum, 0)))
     return minimum + (1 - minimum) * factor
